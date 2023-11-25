@@ -1,0 +1,720 @@
+---
+title: "ECOM 2001 Project: (HD, INTC, PEP)"
+author: "Hongran YE ([REDACTED])"
+output: pdf_document
+header-includes:
+toc: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message= FALSE, warning = FALSE, tidy.opts = list(width.cutoff = 60), tidy = TRUE )
+
+rm(list=ls(all=TRUE))
+```
+
+
+```{r}
+
+# packages
+
+library(tidyquant)
+library(tidyverse)
+library(broom)
+library(knitr)
+library(kableExtra)
+library(Hmisc)
+library(lmtest)
+library(dplyr)
+library(tidyr)
+library(tibble)
+```
+
+# 1. Import the Data 
+
+```{r data}
+# Define stock symbols and retrieve their stock prices starting from January 1, 2000.
+# Select relevant columns (symbol, date, adjusted) and group data by stock symbol.
+
+stockPriceData <- c("HD", "INTC", "PEP") %>%
+tq_get(get = "stock.prices", from = "2000-01-01") %>%
+select(symbol, date, adjusted) %>%
+group_by(symbol)
+
+# Display the first 6 rows of the stock information in a table format.
+# Apply styling to the table with striped rows, centered position, and a specific stripe color.
+# Make the first row bold for emphasis.
+
+head(stockPriceData, n = 6) %>%
+kable(caption = "The first 6 rows of stock information") %>%
+kable_styling(latex_options = c("hold_position", "striped"), position="center", stripe_color="red!8") %>%
+  kableExtra::row_spec(0, bold = TRUE)
+
+
+```
+
+
+# 2. The Analysis
+
+## 2.1 Plot prices over time 
+
+Plot the **prices** of each asset over time separately. 
+
+Succinctly describe in words the evolution of each asset over time.  **(limit: 100 words for each time series)**.
+
+```{r timeSeriesPrices}
+# Create a time series line plot of adjusted stock prices.
+# Map aesthetics to date (x-axis), adjusted price (y-axis), and differentiate lines by stock symbol.
+# Use facet_wrap to create separate plots for each stock.
+# Customize the color of each stock's line and add plot labels (title, y-axis, x-axis).
+# Adjust the plot theme, including the position of the legend and centering the title.
+
+ggplot(stockPriceData, aes(x = date, y = adjusted, color = symbol)) +
+  geom_line(alpha = 0.8, lwd = 0.5) +
+  facet_wrap(factor(symbol, levels = c("HD", "INTC", "PEP")) ~ .) +
+  scale_color_manual(values = c(
+    "HD" = "#EE7125", 
+    "INTC" = "#026CB6",
+    "PEP" = "#C9002B"
+  )) +
+  labs(
+    title = "Time Series Price Trend of Each Stock",
+    y = "Adjusted Price (US$)", 
+    x = "Dates"
+  ) +
+  theme(
+    legend.position = "bottom", 
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+### 2.1.1 Discussion
+
+#### Home Depot (HD)
+Home Depot has a robust upward trajectory in its stock price. The stock has experienced periods of volatility but has demonstrated growth overall over the long term. 
+
+#### Intel Corporation (INTC)
+Intel's stock has shown a relatively flat trajectory in its stock price over the past two decades. Although it experienced periods of both growth and decline, the current stock price of INTC remains comparably close to its value at the beginning of the century. It indicates a period of relative stability without a significant overall increase. 
+
+#### PepsiCo (PEP)
+Pepsi's stock maintained a relatively stable and consistent increase in stock price. Despite this stable growth, it is not as pronounced an increase as HD. 
+
+
+## 2.2 Calculate returns and plot returns over time
+
+
+Calculate **the daily percentage returns** of **each asset** using the following formula: 
+$$
+r_t = 100*\ln\Big(\frac{P_t}{P_{t-1}}\Big) 
+$$
+Where $P_t$ is the asset price at time $t$. Then plot the **returns** for each asset over time.
+
+```{r timeSeriesReturns}
+
+# Calculate the daily returns for each stock. Returns are calculated using the logarithmic return formula, which is the natural log of the ratio of consecutive adjusted prices, multiplied by 100 for percentage.
+stockPriceData<-stockPriceData %>%
+group_by(symbol) %>%
+mutate("Returns" = 100 * log(adjusted / lag(adjusted)))
+
+# Prepare individual data vectors for each stock's returns after removing NA values (which occur for the first entry of each stock due to the lag).
+
+# Store returns for Home Depot (HD) in rHD.
+rHD <- stockPriceData %>% filter(symbol =="HD") %>%
+select(Returns) %>%
+drop_na() %>%
+pull()
+
+# Store returns for Intel Corporation (INTC) in rINTC.
+rINTC <- stockPriceData %>%
+filter(symbol=="INTC") %>%
+select(Returns) %>%
+drop_na() %>%
+pull()
+
+# Store returns for PepsiCo (PEP) in rPEP.
+rPEP <- stockPriceData %>%
+filter(symbol=="PEP") %>%
+select(Returns) %>%
+drop_na() %>%
+pull()
+
+# Filter the 'stockPriceData' data to only include entries after January 1, 2000.
+stockPriceData %>%
+filter(date > "2000-01-01")
+
+```
+
+```{r timeSeriesReturns_doubleCheck}
+# Cross-check by comparing with the prior dataset.
+
+# Combine the first 6 returns of HD, INTC, PEP into a single data frame.
+combinedReturns <- data.frame(
+  HD = head(rHD, n = 6),
+  INTC = head(rINTC, n = 6),
+  PEP = head(rPEP, n = 6)
+)
+
+# Display the combined returns as a formatted table.
+combinedReturns %>%
+  kable(caption = "The first 6 rows of returns for HD, INTC, PEP stocks", align = rep('c', 3)) %>%
+  kable_styling(latex_options = c("hold_position", "striped"), position = "center", stripe_color = "green!8") %>%
+  kableExtra::row_spec(0, bold = TRUE)
+
+```
+
+```{r timeSeriesReturns_plot}
+# Plotting the returns of stocks HD, INTC, and PEP over time using ggplot.
+ggplot(stockPriceData, aes(x = date, y = Returns, color = symbol)) +
+  geom_line(alpha = 0.6, lwd = 0.5) +
+  scale_color_manual(values = c(
+    "HD" = "#EE7125", 
+    "INTC" = "#026CB6",
+    "PEP" = "#C9002B"
+  )) +
+  facet_wrap(factor(symbol, levels = c("HD", "INTC", "PEP")) ~ .) +
+  ylim(-20, 20) +
+  labs(
+    title = "Price Returns of Each Stock Overtime",
+    y = "Price Returns (%)", 
+    x = "Dates"
+  ) +
+  theme(
+    legend.position = "bottom", 
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+## 2.3 Histogram of returns
+
+Create a **histogram** for **each of the returns series**.
+
+```{r histogramReturns_0}
+# Count the number of observations for each stock symbol in 
+stockPriceData %>%
+	group_by(symbol) %>%
+		summarise(n = n())
+
+```
+
+```{r histogramReturns_1}
+# Calculate the sample size for 'HD' stock. Given the uniform time period across stocks, selecting any one stock suffices to ascertain the overall sample size for the dataset.
+samplesize <- sum(stockPriceData$symbol == 'HD')
+samplesize
+
+
+```
+
+
+```{r histogramReturns_2}
+# Calculate the number of bins for a histogram using Sturges' rule, which is based on the sample size.
+numBinsSturges <- 1 + 3.322 * log(samplesize)
+numBinsSturges
+
+```
+Therefore, I chose 30 as the number of bins for my histogram, which is the nearest integer from the calculated value from Sturges' rule. A Float bins value don't make sense in a histogram context. It's standard practice and language parameter datatype requirement to round to the nearest whole number when determining the number of bins. Formulas used are be given after the histogram plot.
+
+```{r histogramReturns_3}
+# Plotting histogram and density of stock returns (HD, INTC, PEP) using ggplot.
+ggplot(stockPriceData, aes(x = Returns, fill = symbol, color = symbol)) +
+  geom_histogram(aes(y = ..density..), bins = 30, alpha = 0.8) +
+  scale_fill_manual(values = c("HD" = "#EE7125", "INTC" = "#026CB6", "PEP" = "#C9002B")) +
+  scale_color_manual(values = c("HD" = "#EE7125", "INTC" = "#026CB6", "PEP" = "#C9002B")) +
+  facet_wrap(~factor(symbol, levels = c("HD", "INTC", "PEP"))) +
+  xlim(-10, 10) +
+  labs(
+    title = "Histogram of Price Returns of Each Stock",
+    y = "Density", 
+    x = "Price Returns (%)"
+  ) +
+  geom_density(color = "black", lwd = 0.3, linetype = 5, alpha = 0) +
+  theme(
+    legend.position = "bottom", 
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+### 2.3.1 Formulas used to calculate the bins
+
+The formula used to calculate the number of bins is **Sturge's Rule** , which is based on the $log(n)$ where $n$ is the sample size. 
+
+\boldmath
+$$Sturge's \; Rule \; for \;Binwidth =
+1+3.322 \ln (n) 
+$$
+\unboldmath
+
+Since n = `r samplesize` observations and using the formula, binwidth = \textbf{`r 1+3.322*log(samplesize)`}. Round to the nearest integer, the number of bins is 30.
+
+
+## 2.4 Summary table of returns
+
+Report the descriptive statistics **in a single table** which includes the mean, median, variance, standard deviation, skewness and kurtosis for each series. 
+
+What conclusions can you draw from these descriptive statistics?
+
+
+
+
+```{r summaryTable}
+# Calculate Descriptive Statistics
+descriptiveStats <- stockPriceData %>%
+  group_by(symbol) %>%
+  summarise(
+    Mean = mean(Returns, na.rm = TRUE),
+    Median = median(Returns, na.rm = TRUE),
+    Variance = var(Returns, na.rm = TRUE),
+    StdDev = sd(Returns, na.rm = TRUE),
+    Skewness = skewness(Returns, na.rm = TRUE),
+    Kurtosis = kurtosis(Returns, na.rm = TRUE)
+  )
+
+# Display Descriptive Statistics in a Table
+descriptiveStats %>%
+  kable(caption = "Descriptive Statistics of Returns for HD, INTC, PEP") %>%
+  kable_styling(latex_options = c("hold_position", "striped"), position = "center", stripe_color = "blue!8") %>%
+  kableExtra::row_spec(0, bold = TRUE)
+```
+
+### 2.4.1 Conclusions from Descriptive Statistics
+
+Mean Returns: HD and PEP have higher average returns compared to INTC, indicating they might be more profitable investments in the period analyzed.
+
+Volatility (StdDev): INTC shows the highest standard deviation, indicating higher price volatility, while PEP shows the lowest, suggesting it's the most stable.
+
+Skewness: All stocks have negative skewness, with HD being the most negatively skewed, indicating a distribution with a longer or fatter tail on the left side of the mean.
+
+Kurtosis: All stocks have high kurtosis values (particularly HD), indicating heavy tails or outliers, which may imply a higher risk of extreme returns.
+
+
+## 2.5 Are average returns significantly different from zero?
+
+### 2.5.1 Hypothesis Testing
+
+**Step 1:** The null and alternative hypothesis
+\boldmath$$ \begin{aligned} H_0&: \mu = 0 \\ H_1&: \mu \neq 0 \end{aligned} $$\unboldmath
+
+**Step 2:** The level of Significance $\alpha = 0.01$ and number of Observations are 
+```{r}
+stockPriceData%>% group_by(symbol)%>% 
+  summarise("n" = n() )
+```
+
+
+
+
+
+**Step 3:** The Test Statistics
+\boldmath$$ t = \frac{\hat{\mu} - \mu}{\frac{\hat{\sigma}}{\sqrt{n}}} \sim t_{n-1} $$\unboldmath
+Substituting the values: \boldmath$$ t =  $$\unboldmath
+
+**Step 4:** The Critical Values For Our Test Statistics
+
+```{r sigTests2}
+
+# lower tail cutoff value
+
+qt(0.01/2, df =samplesize-1)
+# upper tail cutoff value
+qt(1-0.01/2, df = samplesize-1)
+
+```
+
+
+**Step 5**
+
+
+
+
+```{r}
+
+stockPriceData%>%
+ group_by(symbol) %>% 
+    summarise(p = list(broom::tidy(t.test(Returns, mu=0, alternative = "two.sided", conf.level=0.99)))) %>% 
+  mutate(p.value = purrr::map(p, ~select(.x, c('p.value', 'statistic', 'parameter', "method", "alternative", "conf.low", 'conf.high')))) %>% 
+mutate(symbol=fct_relevel(symbol, "HD", "INTC", "PEP")) %>% 
+  arrange(symbol) %>% 
+    select(-p) %>% 
+unnest() %>% 
+kable(caption ="P-Value and t-statistics", label = "stocks2", align=rep('c', 8)) %>% 
+kable_styling(latex_options = c("hold_position", "striped"), position="center", stripe_color="green!8")%>% 
+    kableExtra::row_spec(0, bold = TRUE)%>%
+kableExtra::column_spec(2, bold = TRUE, color='#fd7f6f')%>%
+kableExtra::column_spec(3, bold = TRUE, color='#22a7f0')
+```
+
+### 2.5.2 Conclusions from Hypothesis Testing
+
+HD: The high p-value (0.1446) suggests the mean return is not significantly different from zero.  
+INTC: A very high p-value (0.7621) also indicates no significant difference from zero.  
+PEP: The lower p-value (0.0313) suggests the mean return might be significantly different from zero, indicating a potentially more consistent performance.
+
+### 2.5.3 Engaging Chat-GPT
+
+
+
+When I compared it to my own, I noticed that the Chat-GPT went super in-depth with each step, breaking it all the way down. I saw it explained the statistical significance in great detail. It shows me how important it is to have a deep understanding of statistical methods.
+
+## 2.6 Are average returns different from each other?
+
+### 2.6.1 Hypothesis Testing
+
+**Step 1: Formulating the Null and Alternative Hypothesis**
+
+\boldmath$$ \begin{aligned} H_0&: \mu_{1} = \mu_{2} = \mu_{3} \\ H_1&: At\ least\ one\
+\mu_{j} \neq to\ the\ others \end{aligned} $$\unboldmath
+
+**Step 2: The Level of Significance and Number of Observations**
+
+Since there are three different groups of stock returns to be compared the means of, ANOVA is the appropriate test. The assumptions of ANOVA are: Number of Observations: `r samplesize`, Level of significance: $\alpha = 0.01$. (Given in the question)
+
+
+
+**Step 3: The Test Statistic**
+
+```{r}
+# Checking Homogeneity of Variances
+# Use Bartlett's test for equal variances
+
+bartlettTest <- bartlett.test(Returns ~ symbol, data = stockPriceData)
+print(bartlettTest)
+
+# Checking Homogeneity of Variances with Fligner-Killeen test
+flignerTest <- fligner.test(Returns ~ symbol, data = stockPriceData)
+print(flignerTest)
+
+```
+Both Bartlett's and Fligner-Killeen tests show a p-value < 2.2e-16, indicating that the variances are not equal across groups.
+
+**Step 4: Critical Value and Decision**
+
+Since the homogeneity of variances assumption is violated, Welch's ANOVA is utilised to proceed. The null hypothesis is that the means of the three groups are equal. The alternative hypothesis is that at least one mean is different from the others. The test statistic is the F-statistic, which is calculated as follows:
+
+$$
+F_W = \frac{\sum_{j=1}^{k} \frac{n_j (\bar{X}_j - \bar{X})^2}{k-1}}{\sum_{j=1}^{k} \frac{S_j^2}{n_j} \frac{n_j - 1}{k(n_j - 1)}}
+$$
+
+
+```{r}
+
+# Perform Welch's ANOVA
+welchANOVA <- oneway.test(Returns ~ symbol, data = stockPriceData)
+
+# Print the results
+print(welchANOVA)
+
+```
+Since the p-value (0.7302) is much larger than the significance level (0.01), I fail to reject the null hypothesis. This suggests that there is no statistically significant difference between the average returns of the assets (HD, INTC, and PEP) at the 1% significance level. As the Null Hypothesis is not rejected, there is no reason to conduct post-hoc tests (e.g., Tukey's HSD test).
+
+**Step 5: Conclusion**
+The differences in the mean returns of these assets are not statistically significant. Holding multiple assets does not provide as much benefit in terms of diversification. Investments can be equally allocated among these assets.
+
+
+### 2.6.2 Engaging Chat-GPT
+
+
+
+The answer from the Chat-GPT is similar to mine. The Chat-GPT's response was structured using proper statistical analysis methods. This made me realize how important it is to have a clear, step-by-step approach in statistics.
+
+## 2.7 Correlations
+
+Calculate and present the **correlation matrix of the returns**. 
+
+Discuss the direction and strength of the correlations.
+
+```{r correlations}
+stocksReturns<-stockPriceData%>%
+drop_na()%>%
+select(date, symbol, Returns)%>%
+pivot_wider(date, names_from = symbol, values_from = Returns)
+glimpse(stocksReturns)
+cor(stocksReturns%>%select(-date))%>%
+kable(caption="Correlation Matrix", label = "stocks4",digit=3 , align=rep('c', 4))%>%
+kable_styling(latex_options = c("hold_position", "striped"), position="center", stripe_color="purple!8")%>% 
+  kableExtra::row_spec(0, bold = TRUE)
+```
+
+HD and INTC (0.407) This coefficient suggests a moderate positive correlation between the returns of HD and INTC. When HD returns increase, INTC returns also tend to increase, but not as consistently as a pair with a stronger correlation. 
+
+*HD and PEP (0.378): This coefficient indicates a moderate positive correlation between the returns of HD and PEP. Similar to HD and INTC, when HD returns increase, PEP returns also tend to increase, but the relationship is not very strong. 
+
+INTC and PEP (0.277): This coefficient suggests a weak positive correlation between the returns of INTC and PEP. Although there is some positive relationship, it's less pronounced compared to the correlation between HD and the other two stocks.
+
+
+
+## 2.8 Testing the significance of correlations
+
+Is the assumption of independence of stock returns realistic? Provide evidence (the hypothesis test including **all 5 steps of the hypothesis test** and **the equation for the test statistic**) and a rationale to support your conclusion. 
+
+**Step 1:** Hypotheses
+First, I specify the null and alternative hypotheses:
+\boldmath
+$$
+H_{0}: \rho=0
+$$
+$$
+H_{A}: \rho \neq 0 
+$$
+\unboldmath
+
+**Step 2:** Test Statistic
+Second, I calculate the value of the test statistic using the following formula:
+\boldmath
+$$
+\text { Test statistic: } t^{*}=\frac{r \sqrt{n-2}}{\sqrt{1-r^{2}}}
+$$   
+\unboldmath
+**Step 3:** P-Value
+Third, I use the resulting test statistic to calculate the P-value.
+
+$$
+r = \frac{\sum_{i=1}^{n} (X_i - \bar{X})(Y_i - \bar{Y})}{\sqrt{\sum_{i=1}^{n} (X_i - \bar{X})^2 \sum_{i=1}^{n} (Y_i - \bar{Y})^2}}
+$$
+
+```{r}
+
+
+corr_HD_INTC<- cor.test(rHD,rINTC, digit=3) 
+corr_HD_PEP<- cor.test(rHD,rPEP,digit=3)
+corr_INTC_PEP<-cor.test(rINTC,rPEP, digit=3)
+combined <- cbind(corr_HD_INTC,corr_HD_PEP,corr_INTC_PEP)
+combined_HD_INTC <- combined[, "corr_HD_INTC", drop = FALSE]
+combined_HD_PEP <- combined[, "corr_HD_PEP", drop = FALSE]
+combined_INTC_PEP <- combined[, "corr_INTC_PEP", drop = FALSE]
+
+```
+```{r}
+# Create a table for HD and INTC
+knitr::kable(combined_HD_INTC, caption = "Correlation between HD and INTC", digit = 4, align = rep('c', 4)) %>%
+  kable_styling(latex_options = c("hold_position", "striped", "scale_down"), position = "center", stripe_color = "red!8") %>%
+  kableExtra::row_spec(0, bold = TRUE) %>%
+  kableExtra::row_spec(4, bold = TRUE, color = "#22a7f0")
+
+```
+```{r}
+# Create a table for HD and PEP
+knitr::kable(combined_HD_PEP, caption = "Correlation between HD and PEP", digit = 4, align = rep('c', 4)) %>%
+  kable_styling(latex_options = c("hold_position", "striped", "scale_down"), position = "center", stripe_color = "red!8") %>%
+  kableExtra::row_spec(0, bold = TRUE) %>%
+  kableExtra::row_spec(4, bold = TRUE, color = "#22a7f0")
+```
+```{r}
+# Create a table for INTC and PEP
+knitr::kable(combined_INTC_PEP, caption = "Correlation between INTC and PEP", digit = 4, align = rep('c', 4)) %>%
+  kable_styling(latex_options = c("hold_position", "striped", "scale_down"), position = "center", stripe_color = "red!8") %>%
+  kableExtra::row_spec(0, bold = TRUE) %>%
+  kableExtra::row_spec(4, bold = TRUE, color = "#22a7f0")
+```
+
+**Step 4:** Decision
+
+Correlation Between HD and INTC:
+The p-value is much smaller than 0.01, indicating that the correlation coefficient of 0.407 is significantly different from 0 (null hypothesis). This suggests a moderate positive correlation between HD and INTC, and this result is statistically significant.
+
+Correlation Between HD and PEP:
+The p-value is much smaller than 0.01, indicating that the correlation coefficient of 0.378 is significantly different from 0. This suggests a moderate positive correlation between HD and PEP, and this result is statistically significant.
+
+Correlation Between INTC and PEP:
+Te p-value is much smaller than 0.01, indicating that the correlation coefficient of 0.277 is significantly different from 0. This suggests a weak positive correlation between INTC and PEP, and this result is statistically significant.
+
+**Step 5:** Conclusion
+
+The assumption of independence of stock returns is not realistic. The correlation coefficients between HD and INTC, HD and PEP, and INTC and PEP are all significantly different from 0. This suggests that the returns of these stocks are not independent of each other. All three pairs of stocks (HD & INTC, HD & PEP, INTC & PEP) show statistically significant positive correlations. However, the strengths of these correlations vary, with HD & INTC and HD & PEP showing moderate correlations, and INTC & PEP showing a weaker correlation.
+
+## 2.9 Advising an investor
+
+```{r optimalPortfolio_A}
+# Calculate mean and standard deviation for HD and INTC
+meanHD <- mean(rHD, na.rm = TRUE)
+meanINTC <- mean(rINTC, na.rm = TRUE)
+sdHD <- sd(rHD, na.rm = TRUE)
+sdINTC <- sd(rINTC, na.rm = TRUE)
+
+# Calculate covariance between HD and INTC
+covHDINTC <- cov(rHD, rINTC)
+
+# Define the happiness function
+# w is the weight of HD in the portfolio, so (1-w) is the weight of INTC
+happiness_function <- function(w) {
+  # Calculate the expected return of the portfolio
+  expected_return <- w * meanHD + (1 - w) * meanINTC
+  
+  # Calculate the variance of the portfolio
+  portfolio_variance <- (w^2 * sdHD^2) + ((1 - w)^2 * sdINTC^2) + (2 * w * (1 - w) * covHDINTC)
+  
+  # The happiness function is the expected return minus the variance
+  happiness <- expected_return - portfolio_variance
+  
+  # Return the negative of happiness because I will use optim() to minimize
+  return(-happiness)
+}
+
+# Use optim() to maximize happiness by minimizing the negative of it
+optim_results <- optim(par = 0.5, # starting value for the weight of HD
+                       fn = happiness_function,
+                       lower = 0,
+                       upper = 1,
+                       method = "L-BFGS-B") # bounded optimization
+
+# Optimized weight for HD
+optimized_weight_HD <- optim_results$par
+
+# Optimized weight for INTC
+optimized_weight_INTC <- 1 - optimized_weight_HD
+
+# Output the optimized weights
+cat("Optimized weight for HD:", optimized_weight_HD, "\n")
+cat("Optimized weight for INTC:", optimized_weight_INTC, "\n")
+
+```
+
+
+```{r optimalPortfolio_B}
+# Calculate mean and standard deviation for HD and PEP
+meanHD <- mean(rHD, na.rm = TRUE)
+meanPEP <- mean(rPEP, na.rm = TRUE)
+sdHD <- sd(rHD, na.rm = TRUE)
+sdPEP <- sd(rPEP, na.rm = TRUE)
+
+# Calculate covariance between HD and PEP
+covHDPEP <- cov(rHD, rPEP)
+
+# Define the happiness function for Portfolio B
+happiness_function_B <- function(w) {
+  # Calculate the expected return of the portfolio
+  expected_return_B <- w * meanHD + (1 - w) * meanPEP
+  
+  # Calculate the variance of the portfolio
+  portfolio_variance_B <- (w^2 * sdHD^2) + ((1 - w)^2 * sdPEP^2) + (2 * w * (1 - w) * covHDPEP)
+  
+  # The happiness function is the expected return minus the variance
+  happiness_B <- expected_return_B - portfolio_variance_B
+  
+  # Return the negative of happiness because I will use optim() to minimize
+  return(-happiness_B)
+}
+
+# Use optim() to maximize happiness by minimizing the negative of it for Portfolio B
+optim_results_B <- optim(par = 0.5,
+                         fn = happiness_function_B,
+                         lower = 0,
+                         upper = 1,
+                         method = "L-BFGS-B")
+
+# Optimized weight for HD and PEP in Portfolio B
+optimized_weight_HD_B <- optim_results_B$par
+optimized_weight_PEP_B <- 1 - optimized_weight_HD_B
+
+# Output the optimized weights for Portfolio B
+cat("Portfolio B - Optimized weight for HD:", optimized_weight_HD_B, "\n")
+cat("Portfolio B - Optimized weight for PEP:", optimized_weight_PEP_B, "\n")
+
+
+
+```
+
+```{r optimalPortfolio_C}
+# Calculate mean and standard deviation for INTC and PEP
+meanINTC <- mean(rINTC, na.rm = TRUE)
+meanPEP <- mean(rPEP, na.rm = TRUE)
+sdINTC <- sd(rINTC, na.rm = TRUE)
+sdPEP <- sd(rPEP, na.rm = TRUE)
+
+# Calculate covariance between INTC and PEP
+covINTCPEP <- cov(rINTC, rPEP)
+
+# Define the happiness function for Portfolio C
+happiness_function_C <- function(w) {
+  # Calculate the expected return of the portfolio
+  expected_return_C <- w * meanINTC + (1 - w) * meanPEP
+  
+  # Calculate the variance of the portfolio
+  portfolio_variance_C <- (w^2 * sdINTC^2) + ((1 - w)^2 * sdPEP^2) + (2 * w * (1 - w) * covINTCPEP)
+  
+  # The happiness function is the expected return minus the variance
+  happiness_C <- expected_return_C - portfolio_variance_C
+  
+  # Return the negative of happiness because I will use optim() to minimize
+  return(-happiness_C)
+}
+
+# Use optim() to maximize happiness by minimizing the negative of it for Portfolio C
+optim_results_C <- optim(par = 0.5,
+                         fn = happiness_function_C,
+                         lower = 0,
+                         upper = 1,
+                         method = "L-BFGS-B")
+
+# Optimized weight for INTC and PEP in Portfolio C
+optimized_weight_INTC_C <- optim_results_C$par
+optimized_weight_PEP_C <- 1 - optimized_weight_INTC_C
+
+# Output the optimized weights for Portfolio C
+cat("Portfolio C - Optimized weight for INTC:", optimized_weight_INTC_C, "\n")
+cat("Portfolio C - Optimized weight for PEP:", optimized_weight_PEP_C, "\n")
+
+```
+
+```{r optimalPortfolio_all}
+# Calculate happiness for Portfolio A: HD & INTC
+happiness_A <- -happiness_function(optimized_weight_HD)
+
+# Calculate happiness for Portfolio B: HD & PEP
+happiness_B <- -happiness_function_B(optimized_weight_HD_B)
+
+# Calculate happiness for Portfolio C: INTC & PEP
+happiness_C <- -happiness_function_C(optimized_weight_INTC_C)
+
+# Create a data frame for the results
+results_df <- data.frame(
+  Portfolio = c("A: HD & INTC", "B: HD & PEP", "C: INTC & PEP"),
+  Weight_HD = c(optimized_weight_HD, optimized_weight_HD_B, NA),
+  Weight_INTC = c(optimized_weight_INTC, NA, optimized_weight_INTC_C),
+  Weight_PEP = c(NA, optimized_weight_PEP_B, optimized_weight_PEP_C),
+  Happiness = c(happiness_A, happiness_B, happiness_C)
+)
+
+# Use kable to create a nicely formatted table
+kable(results_df, caption = "Optimized Portfolio Weights and Happiness Values", digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F, position = "center") %>%
+  kableExtra::row_spec(0, bold = TRUE)
+
+
+
+
+```
+The table shows the optimized weights for each stock in the three portfolios (A: HD & INTC, B: HD & PEP, C: INTC & PEP) and the corresponding happiness values calculated for each portfolio. 
+
+#### Portfolio Weights:
+
+1. **Portfolio A (HD & INTC):**
+   - Weight for HD: 67.4%
+   - Weight for INTC: 32.6%
+   - Happiness: -3.083
+
+2. **Portfolio B (HD & PEP):**
+   - Weight for HD: 19.3%
+   - Weight for PEP: 80.7%
+   - Happiness: -1.422
+
+3. **Portfolio C (INTC & PEP):**
+   - Weight for INTC: 13.3%
+   - Weight for PEP: 86.7%
+   - Happiness: -1.452
+
+#### Analysis and Recommendations:
+
+- **Happiness Values:** The happiness value is a measure that combines both the expected return and the risk (variance) of the portfolio. A higher happiness value indicates a more favorable balance of return and risk.
+- **Portfolio Comparison:**
+  - **Portfolio B (HD & PEP)** has the highest happiness value (-1.422), suggesting it offers the best balance between expected return and risk according to the investor's happiness function.
+  - **Portfolio C (INTC & PEP)** has a slightly lower happiness value (-1.452) compared to Portfolio B, but it is still significantly better than Portfolio A.
+  - **Portfolio A (HD & INTC)** has the lowest happiness value (-3.083), indicating it might not be as favorable in terms of the balance between return and risk.
+
+#### Recommendation:
+
+Based on the happiness values, **Portfolio B (HD & PEP)** is the recommended choice for the investor, as it maximizes the investor's happiness function (defined as the expected return of the portfolio minus its variance). This portfolio suggests allocating 19.3% of the investment to HD and 80.7% to PEP.
+
+
+
+

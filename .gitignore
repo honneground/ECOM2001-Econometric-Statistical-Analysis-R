@@ -1,0 +1,16 @@
+# RStudio temporary and workspace state
+.Rproj.user/
+.Rhistory
+.RData
+*.Rout
+
+# Reproducible report outputs
+*.pdf
+*.tex
+*.aux
+*.out
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
